@@ -1,25 +1,38 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import Header from "./Header";
+import AppContainer from "./AppContainer";
 
+const formFields = [
+  { id: 1, label: "First Name" },
+  { id: 2, label: "Last Name" },
+  { id: 3, label: "Email", type: "email" },
+  { id: 4, label: "Date of Birth", type: "date" },
+  { id: 5, label: "Phone Number", type: "tel" },
+];
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
+    <AppContainer>
+      <div className="p-4 mx-auto bg-white shadow-lg rounded-xl">
+        <Header
+          title={"Welcome to Lesson 5 #react-typescript with #tailwindcss"}
+        />
+        {formFields.map((field) => (
+          <React.Fragment key={field.id}>
+            <label>{field.label}</label>
+            <input
+              className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
+              type={field.type ? field.type : "text"}
+            ></input>
+          </React.Fragment>
+        ))}
+        <button
+          className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
+          type="submit"
         >
-          Learn React
-        </a>
-      </header>
-    </div>
+          Submit
+        </button>
+      </div>
+    </AppContainer>
   );
 }
 
