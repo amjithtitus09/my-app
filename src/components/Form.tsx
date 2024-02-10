@@ -114,7 +114,7 @@ export function Form(props: {
       saveFormData(state);
     }, 1000);
     return () => clearTimeout(timeout);
-  }, [state]);
+  });
 
   return (
     <div className="divide-y">
