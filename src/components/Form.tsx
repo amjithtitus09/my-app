@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { navigate, Link } from "raviger";
 
 interface formField {
   id: number;
@@ -21,11 +22,7 @@ const initialformFields: formField[] = [
   { id: 5, label: "Phone Number", type: "tel", value: "" },
 ];
 
-export function Form(props: {
-  goToHomeCB: () => void;
-  formId: number;
-  openFormListCB: () => void;
-}) {
+export function Form(props: { formId: number }) {
   const getLocalForms: () => formData[] = () => {
     const savedFormsJSON = localStorage.getItem("savedForms");
     return savedFormsJSON ? JSON.parse(savedFormsJSON) : [];
@@ -43,7 +40,7 @@ export function Form(props: {
       selectedForm = {
         id: Number(new Date()),
         formFields: initialformFields,
-        title: "",
+        title: "Untitled Form",
       };
       localForms = [...localForms, selectedForm];
       saveLocalForms(localForms);
@@ -91,11 +88,20 @@ export function Form(props: {
     });
   };
 
-  const setFieldValue = (id: number, value: string) => {
+  const setFieldType = (id: number, type: string) => {
     setState({
       ...state,
       formFields: state.formFields.map((field) => {
-        if (field.id === id) field = { ...field, value: value };
+        if (field.id === id) field = { ...field, type: type };
+        return field;
+      }),
+    });
+  };
+  const setFieldLabel = (id: number, label: string) => {
+    setState({
+      ...state,
+      formFields: state.formFields.map((field) => {
+        if (field.id === id) field = { ...field, label: label };
         return field;
       }),
     });
@@ -110,11 +116,17 @@ export function Form(props: {
   }, []);
 
   useEffect(() => {
-    let timeout = setTimeout(() => {
+    const timeout = setTimeout(() => {
       saveFormData(state);
     }, 1000);
-    return () => clearTimeout(timeout);
-  }, [state]);
+    return () => {
+      clearTimeout(timeout);
+    };
+  });
+
+  useEffect(() => {
+    state.id !== props.formId && navigate(`/forms/${state.id}`);
+  }, [state.id, props.formId]);
 
   return (
     <div className="divide-y">
@@ -128,14 +140,25 @@ export function Form(props: {
       <div>
         {state.formFields.map((field) => (
           <React.Fragment key={field.id}>
-            <label>{field.label}</label>
+            {/* <label>{field.label}</label> */}
             <div className="flex">
               <input
                 className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
-                type={field.type ? field.type : "text"}
-                value={field.value}
-                onChange={(e) => setFieldValue(field.id, e.target.value)}
+                type="text"
+                value={field.label}
+                onChange={(e) => setFieldLabel(field.id, e.target.value)}
               ></input>
+              <select
+                className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
+                value={field.type}
+                onChange={(e) => setFieldType(field.id, e.target.value)}
+              >
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="email">Email</option>
+                <option value="date">Date</option>
+                <option value="tel">Phone</option>
+              </select>
               <button
                 className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
                 type="submit"
@@ -179,20 +202,20 @@ export function Form(props: {
         >
           Clear
         </button>
-        <button
+        <Link
           className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
           type="submit"
-          onClick={props.openFormListCB}
+          href={`/forms`}
         >
           Go Back
-        </button>
-        <button
+        </Link>
+        <Link
           className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
           type="submit"
-          onClick={props.goToHomeCB}
+          href={`/`}
         >
           Go Home
-        </button>
+        </Link>
       </div>
     </div>
   );
