@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useReducer } from "react";
 import { navigate } from "raviger";
 
 interface formField {
@@ -13,6 +13,27 @@ interface formData {
   title: string;
   formFields: formField[];
 }
+
+type ChangeFieldValue = {
+  id: number;
+  value: string;
+  type: "change_field_value";
+};
+
+type FormAction = ChangeFieldValue;
+
+const reducer = (state: formData, action: FormAction) => {
+  switch (action.type) {
+    case "change_field_value":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          if (field.id === action.id) field = { ...field, value: action.value };
+          return field;
+        }),
+      };
+  }
+};
 
 export function Preview(props: { formId: number }) {
   const getLocalForms: () => formData[] = () => {
@@ -32,14 +53,8 @@ export function Preview(props: { formId: number }) {
     return selectedForm ? selectedForm : localForms[123];
   };
 
-  const firstQuestion: () => number = () => {
-    return 0;
-  };
-
-  const [state, setState] = useState(() => initialFormData());
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(
-    firstQuestion()
-  );
+  const [state, dispatch] = useReducer(reducer, null, () => initialFormData());
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const titleRef = useRef<HTMLInputElement>(null);
 
   const nextQuestion = () => {
@@ -63,16 +78,6 @@ export function Preview(props: { formId: number }) {
     saveLocalForms(localForms);
   };
 
-  const setFieldValue = (id: number, value: string) => {
-    setState({
-      ...state,
-      formFields: state.formFields.map((field) => {
-        if (field.id === id) field = { ...field, value: value };
-        return field;
-      }),
-    });
-  };
-
   useEffect(() => {
     titleRef.current?.focus();
     saveFormData(state);
@@ -93,10 +98,11 @@ export function Preview(props: { formId: number }) {
                 type={state.formFields[currentQuestionIndex].type}
                 value={state.formFields[currentQuestionIndex].value}
                 onChange={(e) =>
-                  setFieldValue(
-                    state.formFields[currentQuestionIndex].id,
-                    e.target.value
-                  )
+                  dispatch({
+                    type: "change_field_value",
+                    id: state.formFields[currentQuestionIndex].id,
+                    value: e.target.value,
+                  })
                 }
                 ref={titleRef}
               ></input>

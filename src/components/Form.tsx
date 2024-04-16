@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef, useReducer } from "react";
 import { navigate, Link } from "raviger";
 
 interface formField {
@@ -21,6 +21,120 @@ const initialformFields: formField[] = [
   { id: 4, label: "Date of Birth", type: "date", value: "" },
   { id: 5, label: "Phone Number", type: "tel", value: "" },
 ];
+
+type RemoveAction = {
+  type: "remove_field";
+  id: number;
+};
+
+type AddAction = {
+  type: "add_field";
+  label: string;
+  callback: () => void;
+};
+
+type ClearFormAction = {
+  type: "clear_form";
+};
+
+type ChangeFieldTypeAction = {
+  type: "change_field_type";
+  id: number;
+  fieldType: string;
+};
+
+type ChangeFieldLabelAction = {
+  type: "change_field_label";
+  id: number;
+  label: string;
+};
+
+type ChangeFormTitle = {
+  type: "change_form_title";
+  title: string;
+};
+
+type FormAction =
+  | AddAction
+  | RemoveAction
+  | ClearFormAction
+  | ChangeFieldTypeAction
+  | ChangeFieldLabelAction
+  | ChangeFormTitle;
+
+const reducer = (state: formData, action: FormAction) => {
+  switch (action.type) {
+    case "add_field": {
+      const newField = {
+        id: Number(new Date()),
+        label: action.label,
+        type: action.type,
+        value: "",
+      };
+      if (action.label.length > 0) {
+        action.callback();
+        return {
+          ...state,
+          formFields: [...state.formFields, newField],
+        };
+      }
+      return state;
+    }
+    case "remove_field":
+      return {
+        ...state,
+        formFields: state.formFields.filter((field) => field.id !== action.id),
+      };
+    case "clear_form":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          return { ...field, value: "" };
+        }),
+      };
+
+    case "change_field_type":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          if (field.id === action.id)
+            field = { ...field, type: action.fieldType };
+          return field;
+        }),
+      };
+    case "change_field_label":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          if (field.id === action.id) field = { ...field, label: action.label };
+          return field;
+        }),
+      };
+    case "change_form_title":
+      return { ...state, title: action.title };
+  }
+};
+
+type ChangeText = {
+  type: "change_text";
+  value: string;
+};
+
+type ClearText = {
+  type: "clear_text";
+};
+
+type NewFieldActions = ChangeText | ClearText;
+
+const newFieldReducer = (state: string, action: NewFieldActions) => {
+  switch (action.type) {
+    case "change_text": {
+      return action.value;
+    }
+    case "clear_text":
+      return "";
+  }
+};
 
 export function Form(props: { formId: number }) {
   const getLocalForms: () => formData[] = () => {
@@ -49,20 +163,9 @@ export function Form(props: { formId: number }) {
     return selectedForm ? selectedForm : localForms[123];
   };
 
-  const [state, setState] = useState(() => initialFormData());
-  const [newField, setNewField] = useState("");
+  const [state, dispatch] = useReducer(reducer, null, () => initialFormData());
+  const [newField, newFieldDispatch] = useReducer(newFieldReducer, "");
   const titleRef = useRef<HTMLInputElement>(null);
-
-  const addField = () => {
-    setState({
-      ...state,
-      formFields: [
-        ...state.formFields,
-        { id: Number(new Date()), label: newField, type: "text", value: "" },
-      ],
-    });
-    setNewField("");
-  };
 
   const saveFormData = (formData: formData) => {
     let localForms = getLocalForms();
@@ -70,41 +173,6 @@ export function Form(props: { formId: number }) {
       form.id === formData.id ? formData : form
     );
     saveLocalForms(localForms);
-  };
-
-  const clearForm = () => {
-    setState({
-      ...state,
-      formFields: state.formFields.map((field) => {
-        return { ...field, value: "" };
-      }),
-    });
-  };
-
-  const removeField = (id: number) => {
-    setState({
-      ...state,
-      formFields: state.formFields.filter((field) => field.id !== id),
-    });
-  };
-
-  const setFieldType = (id: number, type: string) => {
-    setState({
-      ...state,
-      formFields: state.formFields.map((field) => {
-        if (field.id === id) field = { ...field, type: type };
-        return field;
-      }),
-    });
-  };
-  const setFieldLabel = (id: number, label: string) => {
-    setState({
-      ...state,
-      formFields: state.formFields.map((field) => {
-        if (field.id === id) field = { ...field, label: label };
-        return field;
-      }),
-    });
   };
 
   useEffect(() => {
@@ -134,7 +202,9 @@ export function Form(props: { formId: number }) {
         className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
         type={"text"}
         value={state.title}
-        onChange={(e) => setState({ ...state, title: e.target.value })}
+        onChange={(e) =>
+          dispatch({ type: "change_form_title", title: e.target.value })
+        }
         ref={titleRef}
       ></input>
       <div>
@@ -146,12 +216,24 @@ export function Form(props: { formId: number }) {
                 className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
                 type="text"
                 value={field.label}
-                onChange={(e) => setFieldLabel(field.id, e.target.value)}
+                onChange={(e) =>
+                  dispatch({
+                    type: "change_field_label",
+                    id: field.id,
+                    label: e.target.value,
+                  })
+                }
               ></input>
               <select
                 className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
                 value={field.type}
-                onChange={(e) => setFieldType(field.id, e.target.value)}
+                onChange={(e) =>
+                  dispatch({
+                    type: "change_field_type",
+                    id: field.id,
+                    fieldType: e.target.value,
+                  })
+                }
               >
                 <option value="text">Text</option>
                 <option value="number">Number</option>
@@ -162,7 +244,12 @@ export function Form(props: { formId: number }) {
               <button
                 className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
                 type="submit"
-                onClick={(_) => removeField(field.id)}
+                onClick={(_) =>
+                  dispatch({
+                    type: "remove_field",
+                    id: field.id,
+                  })
+                }
               >
                 Remove
               </button>
@@ -176,13 +263,22 @@ export function Form(props: { formId: number }) {
           type="text"
           value={newField}
           onChange={(e) => {
-            setNewField(e.target.value);
+            newFieldDispatch({
+              type: "change_text",
+              value: e.target.value,
+            });
           }}
         ></input>
         <button
           className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
           type="submit"
-          onClick={addField}
+          onClick={(_) =>
+            dispatch({
+              type: "add_field",
+              label: newField,
+              callback: () => newFieldDispatch({ type: "clear_text" }),
+            })
+          }
         >
           Add Field
         </button>
@@ -198,7 +294,11 @@ export function Form(props: { formId: number }) {
         <button
           className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-gray-400 font-semibold text-white hover:bg-gray-600"
           type="submit"
-          onClick={clearForm}
+          onClick={() =>
+            dispatch({
+              type: "clear_form",
+            })
+          }
         >
           Clear
         </button>
