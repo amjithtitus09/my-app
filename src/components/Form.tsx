@@ -1,27 +1,61 @@
-import React, { useEffect, useRef, useReducer } from "react";
+import React, { useEffect, useRef, useReducer, useState } from "react";
 import { navigate, Link } from "raviger";
+import {
+  FormField,
+  FormData,
+  TextFieldTypes,
+  FieldKind,
+  DropdownField,
+} from "./FormList";
+import {
+  createField,
+  getForm,
+  listFields,
+  removeField,
+  updateField,
+  updateForm,
+} from "../utils/apiUtils";
+import { list } from "@material-tailwind/react";
+import { time } from "console";
 
-interface formField {
-  id: number;
-  label: string;
-  value: string;
-  type: string;
-}
-
-interface formData {
-  id: number;
-  title: string;
-  formFields: formField[];
-}
-
-const initialformFields: formField[] = [
-  { id: 1, label: "First Name", type: "text", value: "" },
-  { id: 2, label: "Last Name", type: "text", value: "" },
-  { id: 3, label: "Email", type: "email", value: "" },
-  { id: 4, label: "Date of Birth", type: "date", value: "" },
-  { id: 5, label: "Phone Number", type: "tel", value: "" },
+const initialformFields: FormField[] = [
+  {
+    kind: "TEXT",
+    id: 1,
+    label: "First Name Test",
+    value: "",
+    meta: { timeout: null },
+  },
+  {
+    kind: "TEXT",
+    id: 2,
+    label: "Last Name",
+    value: "",
+    meta: { timeout: null },
+  },
+  { kind: "TEXT", id: 3, label: "Email", value: "", meta: { timeout: null } },
+  {
+    kind: "TEXT",
+    id: 4,
+    label: "Date of Birth",
+    value: "",
+    meta: { timeout: null },
+  },
+  {
+    kind: "TEXT",
+    id: 5,
+    label: "Phone Number",
+    value: "",
+    meta: { timeout: null },
+  },
 ];
 
+export const initialformData: FormData = {
+  id: 21,
+  title: "First Name Test",
+  description: "text",
+  formFields: initialformFields,
+};
 type RemoveAction = {
   type: "remove_field";
   id: number;
@@ -38,20 +72,59 @@ type ClearFormAction = {
 };
 
 type ChangeFieldTypeAction = {
-  type: "change_field_type";
+  type: "change_field_kind";
   id: number;
-  fieldType: string;
+  kind: FieldKind;
+  updateFieldHandlerCB: any;
 };
 
 type ChangeFieldLabelAction = {
   type: "change_field_label";
   id: number;
   label: string;
+  updateFieldHandlerCB: any;
+};
+
+type AddDropdownOptionAction = {
+  type: "add_dropdown_option";
+  id: number;
+  option: string;
+  updateFieldHandlerCB: any;
+  setNewOptionCB: any;
+};
+
+type RemoveDropdownOptionAction = {
+  type: "remove_dropdown_option";
+  id: number;
+  option: string;
+  updateFieldHandlerCB: any;
 };
 
 type ChangeFormTitle = {
   type: "change_form_title";
   title: string;
+  updateFormHandlerCB: any;
+};
+
+type LoadForm = {
+  type: "load_form";
+  payload: FormData;
+};
+
+type LoadFields = {
+  type: "load_fields";
+  payload: FormField[];
+};
+
+type UpdateTimeout = {
+  type: "update_timeout";
+  id: number;
+  timeout: any;
+};
+
+type UpdateFormTimeout = {
+  type: "update_form_timeout";
+  timeout: any;
 };
 
 type FormAction =
@@ -60,15 +133,27 @@ type FormAction =
   | ClearFormAction
   | ChangeFieldTypeAction
   | ChangeFieldLabelAction
-  | ChangeFormTitle;
+  | ChangeFormTitle
+  | LoadForm
+  | LoadFields
+  | UpdateTimeout
+  | UpdateFormTimeout
+  | AddDropdownOptionAction
+  | RemoveDropdownOptionAction;
 
-const reducer = (state: formData, action: FormAction) => {
+const reducer = (state: FormData, action: FormAction) => {
   switch (action.type) {
+    case "load_form": {
+      return action.payload;
+    }
+    case "load_fields": {
+      return { ...state, formFields: action.payload };
+    }
     case "add_field": {
-      const newField = {
+      const newField: FormField = {
+        kind: "TEXT",
         id: Number(new Date()),
         label: action.label,
-        type: action.type,
         value: "",
       };
       if (action.label.length > 0) {
@@ -93,12 +178,18 @@ const reducer = (state: formData, action: FormAction) => {
         }),
       };
 
-    case "change_field_type":
+    case "change_field_kind":
       return {
         ...state,
         formFields: state.formFields.map((field) => {
-          if (field.id === action.id)
-            field = { ...field, type: action.fieldType };
+          if (field.id === action.id) {
+            field = { ...field, kind: action.kind, options: [] };
+            action.updateFieldHandlerCB(
+              action.id,
+              { kind: action.kind, options: [] },
+              field.meta?.timeout
+            );
+          }
           return field;
         }),
       };
@@ -106,12 +197,66 @@ const reducer = (state: formData, action: FormAction) => {
       return {
         ...state,
         formFields: state.formFields.map((field) => {
-          if (field.id === action.id) field = { ...field, label: action.label };
+          if (field.id === action.id) {
+            field = { ...field, label: action.label };
+            action.updateFieldHandlerCB(
+              action.id,
+              { label: action.label },
+              field.meta?.timeout
+            );
+          }
           return field;
         }),
       };
+    case "update_timeout":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          if (field.id === action.id)
+            field = { ...field, meta: { timeout: action.timeout } };
+          return field;
+        }),
+      };
+
+    case "update_form_timeout":
+      return {
+        ...state,
+        meta: { ...state.meta, titleTimeout: action.timeout },
+      };
+
     case "change_form_title":
+      action.updateFormHandlerCB(
+        { title: action.title },
+        state.meta?.titleTimeout
+      );
       return { ...state, title: action.title };
+    case "add_dropdown_option":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          if (field.id === action.id && "options" in field) {
+            let options = field.options !== null ? field.options : [];
+            field = { ...field, options: [...options, action.option] };
+            action.updateFieldHandlerCB(action.id, { options: field.options });
+            action.setNewOptionCB("");
+          }
+          return field;
+        }),
+      };
+    case "remove_dropdown_option":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          if (field.id === action.id && "options" in field) {
+            let options = field.options !== null ? field.options : [];
+            const index = options.indexOf(action.option);
+            if (index > -1) options.splice(options.indexOf(action.option), 1);
+            field = { ...field, options: options };
+            action.updateFieldHandlerCB(action.id, { options: field.options });
+          }
+          return field;
+        }),
+      };
   }
 };
 
@@ -120,13 +265,19 @@ type ChangeText = {
   value: string;
 };
 
+type ChangeKind = {
+  type: "change_type";
+  value: FieldKind;
+};
+
 type ClearText = {
   type: "clear_text";
 };
 
 type NewFieldActions = ChangeText | ClearText;
+type NewFieldTypeActions = ChangeKind;
 
-const newFieldReducer = (state: string, action: NewFieldActions) => {
+const newFieldTitleReducer = (state: string, action: NewFieldActions) => {
   switch (action.type) {
     case "change_text": {
       return action.value;
@@ -136,65 +287,104 @@ const newFieldReducer = (state: string, action: NewFieldActions) => {
   }
 };
 
-export function Form(props: { formId: number }) {
-  const getLocalForms: () => formData[] = () => {
-    const savedFormsJSON = localStorage.getItem("savedForms");
-    return savedFormsJSON ? JSON.parse(savedFormsJSON) : [];
-  };
+const newFieldKindReducer = (state: FieldKind, action: NewFieldTypeActions) => {
+  switch (action.type) {
+    case "change_type": {
+      return action.value;
+    }
+  }
+};
 
-  const saveLocalForms = (saveFormData: formData[]) => {
+export function Form(props: { formId: number }) {
+  const saveLocalForms = (saveFormData: FormData[]) => {
     localStorage.setItem("savedForms", JSON.stringify(saveFormData));
   };
 
-  const initialFormData: () => formData = () => {
-    let localForms = getLocalForms();
-    let selectedForm;
+  const [state, dispatch] = useReducer(reducer, initialformData);
+  const [newOption, setNewOption] = useState("");
 
-    if (props.formId === 0) {
-      selectedForm = {
-        id: Number(new Date()),
-        formFields: initialformFields,
-        title: "Untitled Form",
-      };
-      localForms = [...localForms, selectedForm];
-      saveLocalForms(localForms);
-    } else selectedForm = localForms.find((form) => form.id === props.formId);
+  const [newFieldTitle, newFieldTitleDispatch] = useReducer(
+    newFieldTitleReducer,
+    ""
+  );
+  const [newFieldKind, newFieldKindDispatch] = useReducer(
+    newFieldKindReducer,
+    "TEXT"
+  );
 
-    return selectedForm ? selectedForm : localForms[123];
-  };
-
-  const [state, dispatch] = useReducer(reducer, null, () => initialFormData());
-  const [newField, newFieldDispatch] = useReducer(newFieldReducer, "");
   const titleRef = useRef<HTMLInputElement>(null);
 
-  const saveFormData = (formData: formData) => {
-    let localForms = getLocalForms();
-    localForms = localForms.map((form) =>
-      form.id === formData.id ? formData : form
-    );
-    saveLocalForms(localForms);
+  const loadForm = async () => {
+    const formData = await getForm(props.formId);
+    dispatch({ type: "load_form", payload: formData });
+  };
+
+  const loadFields = async () => {
+    const fields = await listFields(props.formId);
+    dispatch({ type: "load_fields", payload: fields.results });
   };
 
   useEffect(() => {
-    document.title = "Form Editor";
-    titleRef.current?.focus();
-    return () => {
-      document.title = "React App";
-    };
+    loadForm();
+    loadFields();
   }, []);
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      saveFormData(state);
-    }, 1000);
-    return () => {
-      clearTimeout(timeout);
-    };
-  });
+  const createFieldHandler = async () => {
+    let response = await createField(props.formId, {
+      label: newFieldTitle,
+      kind: newFieldKind,
+    });
+    loadFields();
+    newFieldTitleDispatch({ type: "clear_text" });
+    newFieldKindDispatch({ type: "change_type", value: "TEXT" });
+  };
 
-  useEffect(() => {
-    state.id !== props.formId && navigate(`/forms/${state.id}`);
-  }, [state.id, props.formId]);
+  const removeFieldHandler = async (fieldId: number) => {
+    try {
+      const response = await removeField(props.formId, fieldId);
+      await loadFields();
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const updateFieldHandler = async (
+    fieldId: number,
+    field: Partial<FormField>,
+    existingTimeout: any
+  ) => {
+    if (existingTimeout && "label" in field) {
+      clearTimeout(existingTimeout);
+      dispatch({ type: "update_timeout", id: fieldId, timeout: null });
+    }
+    const timeout = setTimeout(() => {
+      try {
+        const response = updateField(props.formId, fieldId, field);
+      } catch (error) {
+        console.log(error);
+      }
+    }, 2000);
+    if ("label" in field)
+      dispatch({ type: "update_timeout", id: fieldId, timeout: timeout });
+  };
+
+  const updateFormHandler = async (
+    form: Partial<FormData>,
+    titleTimeout: any
+  ) => {
+    if (titleTimeout) {
+      clearTimeout(titleTimeout);
+      dispatch({ type: "update_form_timeout", timeout: null });
+    }
+    const timeout = setTimeout(() => {
+      try {
+        const response = updateForm(props.formId, form);
+      } catch (error) {
+        console.log(error);
+      }
+    }, 2000);
+    dispatch({ type: "update_form_timeout", timeout: timeout });
+  };
 
   return (
     <div className="divide-y">
@@ -203,14 +393,17 @@ export function Form(props: { formId: number }) {
         type={"text"}
         value={state.title}
         onChange={(e) =>
-          dispatch({ type: "change_form_title", title: e.target.value })
+          dispatch({
+            type: "change_form_title",
+            title: e.target.value,
+            updateFormHandlerCB: updateFormHandler,
+          })
         }
         ref={titleRef}
       ></input>
       <div>
-        {state.formFields.map((field) => (
+        {state.formFields?.map((field: FormField) => (
           <React.Fragment key={field.id}>
-            {/* <label>{field.label}</label> */}
             <div className="flex">
               <input
                 className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
@@ -221,64 +414,128 @@ export function Form(props: { formId: number }) {
                     type: "change_field_label",
                     id: field.id,
                     label: e.target.value,
+                    updateFieldHandlerCB: updateFieldHandler,
                   })
                 }
               ></input>
               <select
                 className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
-                value={field.type}
+                value={field.kind}
                 onChange={(e) =>
                   dispatch({
-                    type: "change_field_type",
+                    type: "change_field_kind",
                     id: field.id,
-                    fieldType: e.target.value,
+                    kind: e.target.value as FieldKind,
+                    updateFieldHandlerCB: updateFieldHandler,
                   })
                 }
               >
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="email">Email</option>
-                <option value="date">Date</option>
-                <option value="tel">Phone</option>
+                <option value="TEXT">Text</option>
+                <option value="DROPDOWN">Dropdown</option>
               </select>
+
               <button
                 className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
                 type="submit"
-                onClick={(_) =>
-                  dispatch({
-                    type: "remove_field",
-                    id: field.id,
-                  })
-                }
+                onClick={(_) => removeFieldHandler(field.id)}
               >
                 Remove
               </button>
             </div>
+            {field.kind === "DROPDOWN" ? (
+              <div>
+                <div className="flex-col">
+                  {field.options?.map((option: string) => (
+                    <div className="flex mx-14">
+                      <input
+                        className="flex-1 border-2 border-zinc-300 bg-zinc-300 rounded-2xl p-2.5 m-2.5 hover:bg-white focus:bg-white"
+                        type="text"
+                        value={option}
+                        // onChange={(e) =>
+                        //   dispatch({
+                        //     type: "change_field_label",
+                        //     id: field.id,
+                        //     label: e.target.value,
+                        //     updateFieldHandlerCB: updateFieldHandler,
+                        //   })
+                        // }
+                      ></input>
+                      <button
+                        className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-red-400 font-semibold text-white hover:bg-blue-600"
+                        type="submit"
+                        onClick={(_) =>
+                          dispatch({
+                            type: "remove_dropdown_option",
+                            id: field.id,
+                            option: option,
+                            updateFieldHandlerCB: updateFieldHandler,
+                          })
+                        }
+                      >
+                        Remove Option
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex mx-14">
+                  <input
+                    className="flex-1 border-2 border-zinc-300 bg-zinc-300 rounded-2xl p-2.5 m-2.5 hover:bg-white focus:bg-white"
+                    type="text"
+                    value={newOption}
+                    onChange={(e) => setNewOption(e.target.value)}
+                  ></input>
+                  <button
+                    className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
+                    type="submit"
+                    onClick={(_) =>
+                      dispatch({
+                        type: "add_dropdown_option",
+                        id: field.id,
+                        option: newOption,
+                        updateFieldHandlerCB: updateFieldHandler,
+                        setNewOptionCB: setNewOption,
+                      })
+                    }
+                  >
+                    Add Option
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div></div>
+            )}
           </React.Fragment>
         ))}
       </div>
-      <div className="flex py-2.5">
+      <div className="flex">
         <input
-          className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white flex-1"
+          className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
           type="text"
-          value={newField}
+          value={newFieldTitle}
           onChange={(e) => {
-            newFieldDispatch({
+            newFieldTitleDispatch({
               type: "change_text",
               value: e.target.value,
             });
           }}
         ></input>
+        <select
+          className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
+          value={newFieldKind}
+          onChange={(e) =>
+            newFieldKindDispatch({
+              type: "change_type",
+              value: e.target.value as FieldKind,
+            })
+          }
+        >
+          <option value="TEXT">Text</option>
+          <option value="DROPDOWN">Dropdown</option>
+        </select>
         <button
           className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
           type="submit"
-          onClick={(_) =>
-            dispatch({
-              type: "add_field",
-              label: newField,
-              callback: () => newFieldDispatch({ type: "clear_text" }),
-            })
-          }
+          onClick={createFieldHandler}
         >
           Add Field
         </button>
@@ -287,7 +544,7 @@ export function Form(props: { formId: number }) {
         <button
           className="border-2 border-gray-200 rounded-lg p-2 m-2 bg-blue-400 font-semibold text-white hover:bg-blue-600"
           type="submit"
-          onClick={(_) => saveFormData(state)}
+          //   onClick={(_) => saveFormData(state)}
         >
           Save
         </button>

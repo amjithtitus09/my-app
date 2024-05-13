@@ -2,6 +2,9 @@ import React from "react";
 import logo from "../logo.svg";
 import { Link } from "raviger";
 
+
+
+
 export function Home(props: {}) {
   return (
     <div>

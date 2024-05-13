@@ -1,34 +1,68 @@
 import React, { useState, useEffect, useRef, useReducer } from "react";
 import { navigate } from "raviger";
-
-interface formField {
-  id: number;
-  label: string;
-  value: string;
-  type: string;
-}
-
-interface formData {
-  id: number;
-  title: string;
-  formFields: formField[];
-}
+import { FormField, FormData, Submission, Answer } from "./FormList";
+import {
+  getForm,
+  listFields,
+  submitQuiz,
+  updateField,
+} from "../utils/apiUtils";
+import { initialformData } from "./Form";
 
 type ChangeFieldValue = {
   id: number;
   value: string;
   type: "change_field_value";
+  updateFieldHandlerCB: any;
 };
 
-type FormAction = ChangeFieldValue;
+type LoadForm = {
+  type: "load_form";
+  payload: FormData;
+};
 
-const reducer = (state: formData, action: FormAction) => {
+type LoadFields = {
+  type: "load_fields";
+  payload: FormField[];
+};
+
+type UpdateTimeout = {
+  type: "update_timeout";
+  id: number;
+  timeout: any;
+};
+
+type FormAction = ChangeFieldValue | LoadForm | LoadFields | UpdateTimeout;
+
+const reducer = (state: FormData, action: FormAction) => {
   switch (action.type) {
     case "change_field_value":
       return {
         ...state,
         formFields: state.formFields.map((field) => {
-          if (field.id === action.id) field = { ...field, value: action.value };
+          if (field.id === action.id) {
+            field = { ...field, value: action.value };
+            action.updateFieldHandlerCB(
+              action.id,
+              { value: action.value },
+              field.meta?.timeout
+            );
+          }
+          return field;
+        }),
+      };
+    case "load_form": {
+      return { ...action.payload, formFields: state.formFields };
+    }
+    case "load_fields": {
+      return { ...state, formFields: action.payload };
+    }
+    case "update_timeout":
+      return {
+        ...state,
+        formFields: state.formFields.map((field) => {
+          if (field.id === action.id)
+            field = { ...field, meta: { timeout: action.timeout } };
           return field;
         }),
       };
@@ -36,26 +70,25 @@ const reducer = (state: formData, action: FormAction) => {
 };
 
 export function Preview(props: { formId: number }) {
-  const getLocalForms: () => formData[] = () => {
-    const savedFormsJSON = localStorage.getItem("savedForms");
-    return savedFormsJSON ? JSON.parse(savedFormsJSON) : [];
-  };
-
-  const saveLocalForms = (saveFormData: formData[]) => {
-    localStorage.setItem("savedForms", JSON.stringify(saveFormData));
-  };
-
-  const initialFormData: () => formData = () => {
-    let localForms = getLocalForms();
-
-    let selectedForm = localForms.find((form) => form.id === props.formId);
-
-    return selectedForm ? selectedForm : localForms[123];
-  };
-
-  const [state, dispatch] = useReducer(reducer, null, () => initialFormData());
+  const [state, dispatch] = useReducer(reducer, initialformData);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const titleRef = useRef<HTMLInputElement>(null);
+
+  const loadForm = async () => {
+    const formData = await getForm(props.formId);
+    dispatch({ type: "load_form", payload: formData });
+  };
+
+  const loadFields = async () => {
+    const fields = await listFields(props.formId);
+    if (fields.results.length === 0) navigate(`/forms`);
+    dispatch({ type: "load_fields", payload: fields.results });
+  };
+
+  useEffect(() => {
+    loadForm();
+    loadFields();
+  }, []);
 
   const nextQuestion = () => {
     if (currentQuestionIndex < state.formFields.length - 1)
@@ -65,23 +98,48 @@ export function Preview(props: { formId: number }) {
   const submitForm = () => {
     if (currentQuestionIndex === state.formFields.length - 1) {
       setCurrentQuestionIndex(0);
-      saveFormData(state);
+
+      const answers: Answer[] = [];
+      state.formFields.map((field) =>
+        answers.push({ form_field: field.id, value: field.value })
+      );
+      const submission: Submission = {
+        form: {
+          title: state.title,
+          description: state.description,
+        },
+        answers: answers,
+      };
+      submitQuiz(props.formId, submission);
       navigate(`/forms`);
     }
   };
 
-  const saveFormData = (formData: formData) => {
-    let localForms = getLocalForms();
-    localForms = localForms.map((form) =>
-      form.id === formData.id ? formData : form
-    );
-    saveLocalForms(localForms);
-  };
-
   useEffect(() => {
     titleRef.current?.focus();
-    saveFormData(state);
   });
+
+  const updateFieldHandler = async (
+    fieldId: number,
+    field: Partial<FormField>,
+    existingTimeout: any
+  ) => {
+    if (existingTimeout && "value" in field) {
+      clearTimeout(existingTimeout);
+      dispatch({ type: "update_timeout", id: fieldId, timeout: null });
+    }
+    const timeout = setTimeout(() => {
+      try {
+        const response = updateField(props.formId, fieldId, field);
+      } catch (error) {
+        console.log(error);
+      }
+    }, 2000);
+    if ("label" in field)
+      dispatch({ type: "update_timeout", id: fieldId, timeout: timeout });
+  };
+
+  const formField = state.formFields[currentQuestionIndex];
 
   return (
     <div>
@@ -90,22 +148,42 @@ export function Preview(props: { formId: number }) {
       </h2>
       <div className="">
         <div className="flex-col gap-20">
-          <React.Fragment key={state.formFields[currentQuestionIndex].id}>
-            <label>{state.formFields[currentQuestionIndex].label}</label>
+          <React.Fragment key={formField.id}>
+            <label>{formField.label}</label>
             <div className="flex">
-              <input
-                className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
-                type={state.formFields[currentQuestionIndex].type}
-                value={state.formFields[currentQuestionIndex].value}
-                onChange={(e) =>
-                  dispatch({
-                    type: "change_field_value",
-                    id: state.formFields[currentQuestionIndex].id,
-                    value: e.target.value,
-                  })
-                }
-                ref={titleRef}
-              ></input>
+              {formField.kind === "TEXT" ? (
+                <input
+                  className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
+                  type="text"
+                  value={formField.value}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "change_field_value",
+                      id: formField.id,
+                      value: e.target.value,
+                      updateFieldHandlerCB: updateFieldHandler,
+                    })
+                  }
+                  ref={titleRef}
+                ></input>
+              ) : (
+                <select
+                  className="border-2 border-zinc-200 bg-zinc-100 rounded-2xl p-2.5 m-2.5 w-full hover:bg-white focus:bg-white"
+                  value={formField.value}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "change_field_value",
+                      id: formField.id,
+                      value: e.target.value,
+                      updateFieldHandlerCB: updateFieldHandler,
+                    })
+                  }
+                >
+                  {formField.options.map((option: string) => (
+                    <option value={option}>{option}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </React.Fragment>
         </div>

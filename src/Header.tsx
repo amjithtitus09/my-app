@@ -1,8 +1,15 @@
 import React from "react";
 import logo from "./logo.svg";
-import { ActiveLink } from "raviger";
+import { ActiveLink, navigate } from "raviger";
+import { User } from "./types/userTypes";
+import { Button } from "@material-tailwind/react";
 
-export default function Header(props: { title: string }) {
+export default function Header(props: { currentUser: User; title: string }) {
+  const logout = () => {
+    localStorage.clear();
+    window.location.reload();
+  };
+
   return (
     <div className="flex gap-2 items-center">
       <img
@@ -26,6 +33,13 @@ export default function Header(props: { title: string }) {
         <ActiveLink href="/forms" activeClass="text-blue-500">
           FORMS
         </ActiveLink>
+        {props.currentUser?.username?.length > 0 ? (
+          <button onClick={logout}>LOGOUT</button>
+        ) : (
+          <ActiveLink href="/login" activeClass="text-blue-500">
+            LOGIN
+          </ActiveLink>
+        )}
       </div>
     </div>
   );
